@@ -258,12 +258,8 @@ public class MainActivity extends FragmentActivity implements OnMapReadyCallback
                 location = new LatLng(jsonLocation.getDouble("lat"),jsonLocation.getDouble("lng"));
                 name = jsonObject.getJSONArray("results").getJSONObject(0).getString("name");
 
-                createPin(location,name);
+                createPin(location, name);
 
-                Location loc = new Location("");
-                loc.setLatitude(userLocation.latitude);
-                loc.setLongitude(userLocation.longitude);
-                updateRoute(loc);
 
                 Log.i(MainActivity.class.getName(),
                         "\nLatitude is " + jsonLocation.getString("lat") +
@@ -281,6 +277,7 @@ public class MainActivity extends FragmentActivity implements OnMapReadyCallback
 
     private void createPin(LatLng location, String name) {
 
+
         if(radiusForDestination != null)
             radiusForDestination.remove();
         if(destinationPin != null)
@@ -293,6 +290,14 @@ public class MainActivity extends FragmentActivity implements OnMapReadyCallback
         destinationPin = mMap.addMarker(new MarkerOptions()
                 .position(location)
                 .title(name));
+
+        if(userLocation != null)
+        {
+            Location loc = new Location("");
+            loc.setLatitude(userLocation.latitude);
+            loc.setLongitude(userLocation.longitude);
+            updateRoute(loc);
+        }
     }
 
 
