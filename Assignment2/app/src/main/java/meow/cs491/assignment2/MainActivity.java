@@ -3,6 +3,7 @@ package meow.cs491.assignment2;
 import android.content.Context;
 import android.graphics.Color;
 import android.graphics.Point;
+import android.location.Criteria;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
@@ -46,7 +47,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 
-public class MainActivity extends FragmentActivity implements OnMapReadyCallback {
+public class MainActivity extends FragmentActivity implements OnMapReadyCallback, LocationListener {
 
     private GoogleMap mMap; // Might be null if Google Play services APK is not available.
     Button btnSearch;
@@ -55,6 +56,8 @@ public class MainActivity extends FragmentActivity implements OnMapReadyCallback
     Marker destinationPin = null;
     LatLng userLocation;
     boolean isRouting = true;
+    LocationManager locationManager;
+    String locationProvider;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -69,14 +72,13 @@ public class MainActivity extends FragmentActivity implements OnMapReadyCallback
             @Override
             public void onClick(View v) {
 
-                isRouting = true;
 
                 //If the users location is null, a Toast should be shown that corrects them.
                 if (userLocation == null){
                     Toast.makeText(getApplicationContext(), "Could not find your location. Please try again", Toast.LENGTH_SHORT).show();
                 }else{
                     String URL = "https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=" + userLocation.latitude + "," + userLocation.longitude + "&name=" + etSearch.getText().toString() + "&rankby=distance&key=" + getResources().getString(R.string.server_key);
-                    Log.d("DEBUG", URL + " IS THE URL YOU ARE USING");
+                    Log.d("DEBUG", URL);
                     new HTTPTask().execute(URL);
 
                 }
@@ -101,48 +103,6 @@ public class MainActivity extends FragmentActivity implements OnMapReadyCallback
                 return false;
             }
         });
-    }
-
-
-
-
-    private final LocationListener mLocationListener = new LocationListener() {
-
-        @Override
-        public void onLocationChanged(Location location) {
-            userLocation = new LatLng(location.getLatitude(),location.getLongitude());
-
-            updateRoute(location);
-        }
-
-
-
-        @Override
-        public void onStatusChanged(String provider, int status, Bundle extras) {
-
-        }
-
-        @Override
-        public void onProviderEnabled(String provider) {
-
-        }
-
-        @Override
-        public void onProviderDisabled(String provider) {
-
-        }
-    };
-
-    private void updateRoute(Location location) {
-        if(destinationPin != null && isRouting){
-            isRouting = false;
-            Location destinationLocation = new Location("");
-            destinationLocation.setLatitude(destinationPin.getPosition().latitude);
-            destinationLocation.setLongitude(destinationPin.getPosition().longitude);
-            if(location.distanceTo(destinationLocation) - 200 <= 0){
-                destinationReached();
-            }
-        }
     }
 
     private void destinationReached() {
@@ -172,11 +132,6 @@ public class MainActivity extends FragmentActivity implements OnMapReadyCallback
         mMap.moveCamera(center);
         mMap.animateCamera(zoom);
 
-        LocationManager mLocationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
-        long timer = 0;
-        float distance = 0;
-        mLocationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, timer,
-                distance, mLocationListener);
     }
 
     private void setUpMapIfNeeded() {
@@ -187,8 +142,32 @@ public class MainActivity extends FragmentActivity implements OnMapReadyCallback
             MapFragment mapFrag = ((MapFragment) getFragmentManager().findFragmentById(R.id.map));
             mapFrag.getMapAsync(this);
 
+            //initialize the locaiton manager
+            this.initializeLocationManager();
+
         }
     }
+
+    private void initializeLocationManager() {
+
+        //get the location manager
+        this.locationManager = (LocationManager)getSystemService(Context.LOCATION_SERVICE);
+
+
+        //define the location manager criteria
+        Criteria criteria = new Criteria();
+
+        this.locationProvider = locationManager.getBestProvider(criteria, false);
+
+        Location location = locationManager.getLastKnownLocation(locationProvider);
+
+
+        //initialize the location
+        if(location != null) {
+            onLocationChanged(location);
+        }
+    }
+
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         // Handle action bar item clicks here. The action bar will
@@ -207,13 +186,29 @@ public class MainActivity extends FragmentActivity implements OnMapReadyCallback
     @Override
     protected void onStart(){
         super.onStart();
-
     }
 
     @Override
     protected void onStop() {
         super.onStop();
     }
+
+    @Override
+    public void onLocationChanged(Location location) {
+        userLocation = new LatLng(location.getLatitude(),location.getLongitude());
+        updateRoute(location);
+        Log.d("DEBUG", "New location is is  " + location.getLatitude() + " " + location.getLongitude());
+
+    }
+
+    @Override
+    public void onStatusChanged(String provider, int status, Bundle extras) {}
+
+    @Override
+    public void onProviderEnabled(String provider) {}
+
+    @Override
+    public void onProviderDisabled(String provider) {}
 
     private class HTTPTask extends AsyncTask<String, String, String>{
         String JSON = "", name = "";
@@ -257,6 +252,7 @@ public class MainActivity extends FragmentActivity implements OnMapReadyCallback
                 JSONObject jsonLocation = jsonObject.getJSONArray("results").getJSONObject(0).getJSONObject("geometry").getJSONObject("location");
                 location = new LatLng(jsonLocation.getDouble("lat"),jsonLocation.getDouble("lng"));
                 name = jsonObject.getJSONArray("results").getJSONObject(0).getString("name");
+                isRouting = true;
 
                 createPin(location, name);
 
@@ -275,9 +271,13 @@ public class MainActivity extends FragmentActivity implements OnMapReadyCallback
         }
     }
 
+    @Override
+    protected void onResume() {
+        super.onResume();
+        this.locationManager.requestLocationUpdates(this.locationProvider, 400, 1, this);
+    }
+
     private void createPin(LatLng location, String name) {
-
-
         if(radiusForDestination != null)
             radiusForDestination.remove();
         if(destinationPin != null)
@@ -299,6 +299,23 @@ public class MainActivity extends FragmentActivity implements OnMapReadyCallback
             updateRoute(loc);
         }
     }
+    private void updateRoute(Location location) {
+        if(destinationPin != null && isRouting){
 
+            Location destinationLocation = new Location("");
+            destinationLocation.setLatitude(destinationPin.getPosition().latitude);
+            destinationLocation.setLongitude(destinationPin.getPosition().longitude);
+            Log.d("DEBUG", "Distance is  " + (location.distanceTo(destinationLocation) - 200));
+            Log.d("DEBUG", "Location is is  " + location.getLatitude() + " " + location.getLongitude());
+            Log.d("DEBUG", "Destination is  " + destinationLocation.getLatitude() + " " + destinationLocation.getLongitude());
+
+
+            if(destinationLocation.distanceTo(location) - 200 <= 0){
+                destinationReached();
+                isRouting = false;
+
+            }
+        }
+    }
 
 }
